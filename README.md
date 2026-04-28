@@ -1,26 +1,43 @@
 # aio-talk-standalone
 
-Patched build of `ghcr.io/nextcloud-releases/aio-talk` for standalone (non-mastercontainer) deployments.
+Patched build of `ghcr.io/nextcloud-releases/aio-talk` for standalone (non-mastercontainer) deployments — e.g. Docker Swarm with Traefik, where `network_mode: host` isn't an option.
+
+Published at: **`strangewill/aio-talk-standalone`** ([Docker Hub](https://hub.docker.com/r/strangewill/aio-talk-standalone))
 
 ## What this changes
 
-Adds a `RELAY_IP_V4` environment variable that overrides the auto-detected eturnal relay IPv4 address. This is needed when the container's `hostname -i` returns a private Docker network IP rather than the host's public IP — which happens in Docker Swarm and most non-AIO-mastercontainer deployments.
+Adds a `RELAY_IP_V4` environment variable that overrides the auto-detected eturnal relay IPv4 address. Upstream derives it from `hostname -i`, which inside Swarm/bridge networks returns a private Docker IP — that gets advertised to remote browsers as the TURN relay endpoint and ICE fails. With `RELAY_IP_V4` set, the host's public IP is advertised instead.
+
+If `RELAY_IP_V4` is unset, behavior matches upstream exactly.
 
 ## Usage
 
-Build:
-```
-docker build -t aio-talk-standalone:local .
-```
+In your Swarm stack file:
 
-In your stack file, reference `aio-talk-standalone:local` and add:
 ```yaml
-environment:
-  RELAY_IP_V4: <your public IPv4>
+services:
+  talk:
+    image: strangewill/aio-talk-standalone:latest
+    environment:
+      RELAY_IP_V4: <your public IPv4>
+      AIO_LOG_LEVEL: info
+      # ...other Talk env vars (NC_DOMAIN, TALK_HOST, TURN_SECRET, SIGNALING_SECRET, etc.)
 ```
 
-If `RELAY_IP_V4` is unset, behavior matches upstream.
+For production, prefer pinning to a dated tag or digest rather than `:latest`:
 
-## Updating to a new upstream version
+```yaml
+image: strangewill/aio-talk-standalone:20260428
+# or, fully pinned:
+image: strangewill/aio-talk-standalone@sha256:<digest>
+```
 
-Run `./update.sh`. It diffs upstream against the local patched `start.sh`. Manually merge changes, preserving the `RELAY_IP_V4` block.
+### Standalone-specific env vars worth knowing
+
+The AIO mastercontainer auto-injects many env vars; in a standalone deployment you set them yourself. Two that surprise people:
+
+- **`AIO_LOG_LEVEL`** — required. Valid values: `debug`, `info`, `warn`, `error`. If unset, `eturnal.yml` is rendered with an empty `log_level:` and eturnal refuses to start (`Invalid value of parameter 'eturnal->log_level'`).
+- **`EXTRA_WHITELIST_PEER`** — optional. Adds an additional peer IP to eturnal's `whitelist_peers` list (alongside the auto-detected Talk service IPs). Useful when an HPB or signaling peer reaches eturnal from an IP that wouldn't otherwise be whitelisted.
+
+For the full list of env vars the entrypoint reads, grep `start.sh` in this repo or check the upstream [Containers/talk](https://github.com/nextcloud/all-in-one/tree/main/Containers/talk) directory.
+

@@ -106,6 +106,7 @@ eturnal:
   - "$IPv4_ADDRESS_TALK_RELAY"
   - "$IPv4_ADDRESS_TALK"
   - "$IPv6_ADDRESS_TALK"
+  - "$EXTRA_WHITELIST_PEER"
 TURN_CONF
 
 # Remove empty lines so that the config is not invalid
